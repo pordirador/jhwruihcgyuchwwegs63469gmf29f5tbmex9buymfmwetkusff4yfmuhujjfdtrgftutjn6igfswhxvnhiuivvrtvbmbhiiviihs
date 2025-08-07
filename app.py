@@ -5,6 +5,15 @@ import numpy as np
 import mediapipe as mp
 import base64
 import os
+from flask import send_from_directory
+
+@app.route('/')
+def serve_frontend():
+    return send_from_directory('../frontend', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('../frontend', path)
 
 app = Flask(__name__)
 
@@ -365,3 +374,4 @@ def analyze_image():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
