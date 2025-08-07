@@ -1,0 +1,293 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализатор пропорций лица</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 20px;
+        }
+        .image-section {
+            flex: 2;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .results-section {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            max-width: 100%;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .metric-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .metric-name {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .metric-value {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .metric-ideal {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="image-section">
+            <h1>Анализатор пропорций лица</h1>
+            <input type="file" id="imageInput" accept="image/*">
+            <div style="margin: 20px 0;">
+                <canvas id="imageCanvas"></canvas>
+            </div>
+        </div>
+        
+        <div class="results-section">
+            <h2>Результаты анализа</h2>
+            <div class="navigation">
+                <button id="prevBtn">← Предыдущий</button>
+                <button id="nextBtn">Следующий →</button>
+            </div>
+            
+            <div class="metric-info">
+                <div class="metric-name" id="metricName">Выберите изображение</div>
+                <div class="metric-value" id="metricValue">-</div>
+                <div class="metric-ideal" id="metricIdeal">-</div>
+                <div id="metricDescription">Загрузите изображение лица для анализа пропорций.</div>
+            </div>
+            
+            <div id="allResults" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const imageInput = document.getElementById('imageInput');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const metricName = document.getElementById('metricName');
+        const metricValue = document.getElementById('metricValue');
+        const metricIdeal = document.getElementById('metricIdeal');
+        const metricDescription = document.getElementById('metricDescription');
+        const allResults = document.getElementById('allResults');
+        
+        let currentImage = null;
+        let analysisResults = [];
+        let currentMetricIndex = 0;
+        
+        // Обработчик загрузки изображения
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    // Устанавливаем размеры canvas
+                    const maxWidth = 800;
+                    const maxHeight = 600;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > maxWidth) {
+                        height = (maxWidth / width) * height;
+                        width = maxWidth;
+                    }
+                    
+                    if (height > maxHeight) {
+                        width = (maxHeight / height) * width;
+                        height = maxHeight;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    currentImage = img;
+                    
+                    // Отправляем изображение на анализ
+                    analyzeImage(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // Функция для отправки изображения на бэкенд
+        async function analyzeImage(img) {
+            try {
+                // Конвертируем изображение в base64
+                const imageData = getBase64Image(img);
+                
+                // Отправляем на бэкенд
+                const response = await fetch('http://your-backend-url/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: imageData })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                
+                analysisResults = data.results;
+                currentMetricIndex = 0;
+                
+                // Показываем первый результат
+                showCurrentMetric();
+                showAllResults();
+                
+            } catch (error) {
+                console.error('Error analyzing image:', error);
+                alert('Произошла ошибка при анализе изображения');
+            }
+        }
+        
+        // Функция для конвертации изображения в base64
+        function getBase64Image(img) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            return tempCanvas.toDataURL('image/jpeg');
+        }
+        
+        // Функция для отображения текущей метрики
+        function showCurrentMetric() {
+            if (analysisResults.length === 0) return;
+            
+            const metric = analysisResults[currentMetricIndex];
+            
+            // Обновляем информацию о метрике
+            metricName.textContent = metric.description.split(':')[0] || metric.description;
+            metricDescription.textContent = metric.description;
+            
+            if (metric.status === 'error') {
+                metricValue.textContent = 'Ошибка расчета';
+                metricValue.style.color = '#F44336';
+                metricIdeal.textContent = `Ошибка: ${metric.message || 'неизвестная ошибка'}`;
+            } else {
+                metricValue.textContent = metric.value_str || 'N/A';
+                metricValue.style.color = metric.status === 'ok' ? '#4CAF50' : '#FF9800';
+                
+                if (metric.ideal_range) {
+                    if (Array.isArray(metric.ideal_range[0])) {
+                        metricIdeal.innerHTML = 'Идеальные диапазоны:<br>' + 
+                            metric.ideal_range.map((r, i) => 
+                                `Часть ${i+1}: ${r[0].toFixed(2)}-${r[1].toFixed(2)}`
+                            ).join('<br>');
+                    } else {
+                        metricIdeal.textContent = 
+                            `Идеальный диапазон: ${metric.ideal_range[0].toFixed(2)}-${metric.ideal_range[1].toFixed(2)}`;
+                    }
+                } else {
+                    metricIdeal.textContent = 'Нет данных об идеальном диапазоне';
+                }
+            }
+            
+            // Отрисовываем изображение с аннотациями
+            drawImageWithMetric();
+        }
+        
+        // Функция для отрисовки изображения с текущей метрикой
+        function drawImageWithMetric() {
+            if (!currentImage) return;
+            
+            // Очищаем canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Рисуем изображение
+            ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
+            
+            // Здесь будет логика для рисования аннотаций текущей метрики
+            // (это потребует дополнительной реализации)
+        }
+        
+        // Функция для отображения всех результатов
+        function showAllResults() {
+            if (analysisResults.length === 0) {
+                allResults.innerHTML = '<p>Нет результатов для отображения</p>';
+                return;
+            }
+            
+            let html = '<h3>Все результаты:</h3><ul>';
+            
+            analysisResults.forEach((result, index) => {
+                const isCurrent = index === currentMetricIndex;
+                const color = result.status === 'ok' ? 'green' : 
+                             result.status === 'bad' ? 'orange' : 'red';
+                
+                html += `<li style="margin-bottom: 10px; ${isCurrent ? 'font-weight: bold;' : ''}">
+                    <span style="color: ${color}">${result.description.split(':')[0]}</span>: 
+                    ${result.value_str || 'N/A'}
+                </li>`;
+            });
+            
+            html += '</ul>';
+            allResults.innerHTML = html;
+        }
+        
+        // Обработчики кнопок навигации
+        prevBtn.addEventListener('click', () => {
+            if (analysisResults.length === 0) return;
+            currentMetricIndex = (currentMetricIndex - 1 + analysisResults.length) % analysisResults.length;
+            showCurrentMetric();
+        });
+        
+        nextBtn.addEventListener('click', () => {
+            if (analysisResults.length === 0) return;
+            currentMetricIndex = (currentMetricIndex + 1) % analysisResults.length;
+            showCurrentMetric();
+        });
+    </script>
+</body>
+</html>
