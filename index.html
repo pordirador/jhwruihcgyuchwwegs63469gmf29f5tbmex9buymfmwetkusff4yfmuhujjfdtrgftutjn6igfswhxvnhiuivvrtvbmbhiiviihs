@@ -1,10 +1,9 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>пупсики2</title>
+    <title>Анализатор пропорций лица</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -72,6 +71,11 @@
             justify-content: space-between;
             margin: 15px 0;
         }
+        .loading {
+            display: none;
+            color: #2196F3;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -79,6 +83,7 @@
         <div class="image-section">
             <h1>Анализатор пропорций лица</h1>
             <input type="file" id="imageInput" accept="image/*">
+            <div class="loading" id="loadingIndicator">Анализируем изображение...</div>
             <div style="margin: 20px 0;">
                 <canvas id="imageCanvas"></canvas>
             </div>
@@ -103,9 +108,11 @@
     </div>
 
     <script>
+        // Элементы страницы
         const canvas = document.getElementById('imageCanvas');
         const ctx = canvas.getContext('2d');
         const imageInput = document.getElementById('imageInput');
+        const loadingIndicator = document.getElementById('loadingIndicator');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const metricName = document.getElementById('metricName');
@@ -114,18 +121,13 @@
         const metricDescription = document.getElementById('metricDescription');
         const allResults = document.getElementById('allResults');
         
-        async function fetchData() {
-    const response = await fetch('/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData })
-    });
-    return response.json();
-}
-        
+        // Данные анализа
         let currentImage = null;
         let analysisResults = [];
         let currentMetricIndex = 0;
+        
+        // URL вашего бэкенда на PythonAnywhere
+        const BACKEND_URL = 'https://pupsikpups.pythonanywhere.com/analyze';
         
         // Обработчик загрузки изображения
         imageInput.addEventListener('change', function(e) {
@@ -167,38 +169,45 @@
         
         // Функция для отправки изображения на бэкенд
         async function analyzeImage(img) {
-    try {
-        // Конвертируем изображение в base64
-        const imageData = getBase64Image(img);
-        
-        // Отправляем на бэкенд
-        const response = await fetch('/analyze', {  // Используем относительный путь
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ image: imageData })
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            alert(data.error);
-            return;
+            try {
+                loadingIndicator.style.display = 'block';
+                
+                // Конвертируем изображение в base64
+                const imageData = getBase64Image(img);
+                
+                // Отправляем на бэкенд
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: imageData })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Ошибка сервера: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                analysisResults = data.results || [];
+                currentMetricIndex = 0;
+                
+                // Показываем первый результат
+                showCurrentMetric();
+                showAllResults();
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Произошла ошибка: ' + error.message);
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
         }
-        
-        analysisResults = data.results;
-        currentMetricIndex = 0;
-        
-        // Показываем первый результат
-        showCurrentMetric();
-        showAllResults();
-        
-    } catch (error) {
-        console.error('Error analyzing image:', error);
-        alert('Произошла ошибка при анализе изображения');
-    }
-}
         
         // Функция для конвертации изображения в base64
         function getBase64Image(img) {
@@ -207,12 +216,18 @@
             tempCanvas.height = img.height;
             const tempCtx = tempCanvas.getContext('2d');
             tempCtx.drawImage(img, 0, 0);
-            return tempCanvas.toDataURL('image/jpeg');
+            return tempCanvas.toDataURL('image/jpeg').split(',')[1]; // Берем только данные без префикса
         }
         
         // Функция для отображения текущей метрики
         function showCurrentMetric() {
-            if (analysisResults.length === 0) return;
+            if (analysisResults.length === 0) {
+                metricName.textContent = 'Нет данных';
+                metricValue.textContent = '-';
+                metricIdeal.textContent = '-';
+                metricDescription.textContent = 'Не удалось проанализировать изображение';
+                return;
+            }
             
             const metric = analysisResults[currentMetricIndex];
             
@@ -243,22 +258,17 @@
                 }
             }
             
-            // Отрисовываем изображение с аннотациями
             drawImageWithMetric();
         }
         
-        // Функция для отрисовки изображения с текущей метрикой
+        // Функция для отрисовки изображения с аннотациями
         function drawImageWithMetric() {
             if (!currentImage) return;
             
-            // Очищаем canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Рисуем изображение
             ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
             
-            // Здесь будет логика для рисования аннотаций текущей метрики
-            // (это потребует дополнительной реализации)
+            // Здесь можно добавить рисование аннотаций, если нужно
         }
         
         // Функция для отображения всех результатов
