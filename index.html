@@ -113,13 +113,15 @@
         const metricIdeal = document.getElementById('metricIdeal');
         const metricDescription = document.getElementById('metricDescription');
         const allResults = document.getElementById('allResults');
-        const response = await fetch('http://localhost:5000/analyze', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ image: imageData })
-});
+        
+        async function fetchData() {
+    const response = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+    });
+    return response.json();
+}
         
         let currentImage = null;
         let analysisResults = [];
