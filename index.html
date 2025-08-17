@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица</title>
+    <title>Анализатор пропорций лица22</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -169,45 +169,35 @@
         
         // Функция для отправки изображения на бэкенд
         async function analyzeImage(img) {
-            try {
-                loadingIndicator.style.display = 'block';
-                
-                // Конвертируем изображение в base64
-                const imageData = getBase64Image(img);
-                
-                // Отправляем на бэкенд
-                const response = await fetch(BACKEND_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ image: imageData })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Ошибка сервера: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                analysisResults = data.results || [];
-                currentMetricIndex = 0;
-                
-                // Показываем первый результат
-                showCurrentMetric();
-                showAllResults();
-                
-            } catch (error) {
-                console.error('Ошибка:', error);
-                alert('Произошла ошибка: ' + error.message);
-            } finally {
-                loadingIndicator.style.display = 'none';
-            }
-        }
+    try {
+        loadingIndicator.style.display = 'block';
+        const imageData = getBase64Image(img);
+        
+        const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Origin': 'https://pordirador.github.io'  // Явно указываем origin
+            },
+            body: JSON.stringify({ image: imageData }),
+            mode: 'cors'  // Явно включаем CORS
+        });
+        
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        
+        analysisResults = data.results || [];
+        currentMetricIndex = 0;
+        showCurrentMetric();
+        showAllResults();
+        
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка при анализе: ' + error.message);
+    } finally {
+        loadingIndicator.style.display = 'none';
+    }
+}
         
         // Функция для конвертации изображения в base64
         function getBase64Image(img) {
