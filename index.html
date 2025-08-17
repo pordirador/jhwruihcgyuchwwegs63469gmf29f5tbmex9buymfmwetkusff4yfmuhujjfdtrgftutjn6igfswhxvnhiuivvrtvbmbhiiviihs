@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица</title>
+    <title>пупсики</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -165,38 +165,38 @@
         
         // Функция для отправки изображения на бэкенд
         async function analyzeImage(img) {
-            try {
-                // Конвертируем изображение в base64
-                const imageData = getBase64Image(img);
-                
-                // Отправляем на бэкенд
-                const response = await fetch('http://your-backend-url/analyze', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ image: imageData })
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-                
-                analysisResults = data.results;
-                currentMetricIndex = 0;
-                
-                // Показываем первый результат
-                showCurrentMetric();
-                showAllResults();
-                
-            } catch (error) {
-                console.error('Error analyzing image:', error);
-                alert('Произошла ошибка при анализе изображения');
-            }
+    try {
+        // Конвертируем изображение в base64
+        const imageData = getBase64Image(img);
+        
+        // Отправляем на бэкенд
+        const response = await fetch('/analyze', {  // Используем относительный путь
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ image: imageData })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            alert(data.error);
+            return;
         }
+        
+        analysisResults = data.results;
+        currentMetricIndex = 0;
+        
+        // Показываем первый результат
+        showCurrentMetric();
+        showAllResults();
+        
+    } catch (error) {
+        console.error('Error analyzing image:', error);
+        alert('Произошла ошибка при анализе изображения');
+    }
+}
         
         // Функция для конвертации изображения в base64
         function getBase64Image(img) {
