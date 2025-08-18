@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица3</title>
+    <title>Анализатор пропорций лица4</title>
     <link rel="icon" href="data:,">  <!-- Пустая иконка -->
     <style>
         body {
@@ -171,32 +171,25 @@
         // Функция для отправки изображения на бэкенд
         async function analyzeImage(img) {
     try {
-        loadingIndicator.style.display = 'block';
         const imageData = getBase64Image(img);
         
-        const response = await fetch(BACKEND_URL, {
+        const response = await fetch('https://pupsikpups.pythonanywhere.com/analyze', {
             method: 'POST',
+            mode: 'cors',  // Явно указываем режим CORS
             headers: {
                 'Content-Type': 'application/json',
-                'Origin': 'https://pordirador.github.io'  // Явно указываем origin
             },
-            body: JSON.stringify({ image: imageData }),
-            mode: 'cors'  // Явно включаем CORS
+            body: JSON.stringify({ image: imageData })
         });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        
-        analysisResults = data.results || [];
-        currentMetricIndex = 0;
-        showCurrentMetric();
-        showAllResults();
-        
+        return await response.json();
     } catch (error) {
-        console.error('Error:', error);
-        alert('Ошибка при анализе: ' + error.message);
-    } finally {
-        loadingIndicator.style.display = 'none';
+        console.error('Ошибка при анализе:', error);
+        throw error;
     }
 }
         
