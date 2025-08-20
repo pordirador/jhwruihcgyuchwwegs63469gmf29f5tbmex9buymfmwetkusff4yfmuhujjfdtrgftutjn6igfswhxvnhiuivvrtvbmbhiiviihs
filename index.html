@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица10</title>
+    <title>Анализатор пропорций лица11</title>
     <style>
         /* Ваши стили остаются без изменений */
         body {
@@ -258,20 +258,21 @@
         
         // 4. Функция обнаружения landmarks
         async function detectFaceLandmarks(img) {
-            return new Promise((resolve) => {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = img.width;
-                tempCanvas.height = img.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.drawImage(img, 0, 0);
-                
-                faceMesh.onResults((results) => {
-                    resolve(results.multiFaceLandmarks || []);
-                });
-                
-                faceMesh.send({image: tempCanvas});
-            });
-        }
+    return new Promise((resolve) => {
+        // Создаем canvas с ТОЧНЫМИ размерами изображения
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.naturalWidth;  // Используем натуральные размеры
+        tempCanvas.height = img.naturalHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+        
+        faceMesh.onResults((results) => {
+            resolve(results.multiFaceLandmarks || []);
+        });
+        
+        faceMesh.send({image: tempCanvas});
+    });
+}
         
         // 5. Показать ошибку
         function showError(message) {
@@ -281,18 +282,22 @@
         
         // 6. Отправка landmarks на бэкенд
         async function analyzeLandmarks(landmarks) {
-            try {
-                const response = await fetch(BACKEND_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ 
-                        landmarks: landmarks.map(lm => ({ x: lm.x, y: lm.y, z: lm.z })),
-                        image_width: currentImage.width,
-                        image_height: currentImage.height
-                    })
-                });
+    try {
+        const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                landmarks: landmarks.map(lm => ({ 
+                    x: lm.x, 
+                    y: lm.y, 
+                    z: lm.z 
+                })),
+                image_width: currentImage.naturalWidth,  // Натуральная ширина
+                image_height: currentImage.naturalHeight // Натуральная высота
+            })
+        });
                 
                 if (!response.ok) {
                     throw new Error(`Ошибка сервера: ${response.status}`);
