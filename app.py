@@ -8,7 +8,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+
+# Разрешаем запросы с вашего GitHub Pages и других доменов
+CORS(app, origins=[
+    "https://pordirador.github.io",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    # Добавьте другие домены при необходимости
+])
 
 class FaceAnalyzer:
     def __init__(self):
@@ -27,7 +34,7 @@ class FaceAnalyzer:
                 "points": (),
                 "calculate": self._calc_mandible_angle,
                 "ideal_range": (70, 90),
-                "description": "Угол мандибулы (70°–90°)",
+                "description": "Угол мандибулы (85°–95°)",
             },
             "eye_angle": {
                 "points": (33, 2, 263),
@@ -43,9 +50,15 @@ class FaceAnalyzer:
             },
             "eye_shape_ratio": {
                 "points": (133, 33, 159, 145),
-                "calculate": lambda p1, p2, p3, p4: self._calc_length(p1, p2) / self._calc_length(p3, p4) + 1,
+                "calculate": lambda p1, p2, p3, p4: self._calc_length(p1, p2) / self._calc_length(p3, p4),
                 "ideal_range": (2.8, 3.8),
                 "description": "Разрез глаз (длина/высота, 2.8-3.8)",
+            },
+            "media_canthal_angle": {
+                "points": (362, 386, 374, 133, 153, 145),  # Левый + правый глаз
+                "calculate": self._calc_media_canthal_angle,
+                "ideal_range": (20, 42),
+                "description": "Медиальный кантальный угол (35°-70°)",
             }
         }
 
@@ -82,6 +95,28 @@ class FaceAnalyzer:
         cosine = np.clip(cosine, -1.0, 1.0)
         return np.degrees(np.arccos(cosine))
 
+    def _calc_canthus_angle(self, canthus_point, upper_point, lower_point):
+        """Вычисляет угол кантуса для одного глаза"""
+        vec_upper = np.array([upper_point[0] - canthus_point[0], upper_point[1] - canthus_point[1]])
+        vec_lower = np.array([lower_point[0] - canthus_point[0], lower_point[1] - canthus_point[1]])
+
+        norm_upper = np.linalg.norm(vec_upper)
+        norm_lower = np.linalg.norm(vec_lower)
+        if norm_upper == 0 or norm_lower == 0:
+            return 0.0
+
+        cosine = np.dot(vec_upper, vec_lower) / (norm_upper * norm_lower)
+        cosine = np.clip(cosine, -1.0, 1.0)
+        return np.degrees(np.arccos(cosine))
+
+    def _calc_media_canthal_angle(self, left_canthus, left_upper, left_lower, right_canthus, right_upper, right_lower):
+        """Вычисляет медиальный кантальный угол для обоих глаз"""
+        left_angle = self._calc_canthus_angle(left_canthus, left_upper, left_lower)
+        right_angle = self._calc_canthus_angle(right_canthus, right_upper, right_lower)
+        
+        # Возвращаем среднее значение углов обоих глаз
+        return (left_angle + right_angle) / 2
+
     def _is_in_ideal_range(self, value, ideal_range):
         """Проверяет, находится ли значение в идеальном диапазоне"""
         if ideal_range is None:
@@ -97,7 +132,7 @@ class FaceAnalyzer:
                 x = lm['x'] * image_width
                 y = lm['y'] * image_height
                 normalized_landmarks.append((x, y))
-            
+
             analysis_results = []
             for key, metric in self.metrics.items():
                 try:
@@ -117,7 +152,7 @@ class FaceAnalyzer:
 
                     status = "ok" if self._is_in_ideal_range(value, metric.get("ideal_range")) else "bad"
                     value_str = f"{value:.3f}"
-                    
+
                     analysis_results.append({
                         "name": key,
                         "value": value,
@@ -137,9 +172,9 @@ class FaceAnalyzer:
                         "description": metric['description'],
                         "ideal_range": metric.get('ideal_range')
                     })
-            
+
             return analysis_results
-            
+
         except Exception as e:
             logger.error(f"Error analyzing landmarks: {str(e)}")
             return None
@@ -181,22 +216,22 @@ def analyze_landmarks():
         data = request.json
         if not data or 'landmarks' not in data:
             return jsonify({"error": "No landmarks provided"}), 400
-            
+
         landmarks = data['landmarks']
         image_width = data.get('image_width', 1)
         image_height = data.get('image_height', 1)
-        
+
         if len(landmarks) < 468:  # MediaPipe Face Mesh имеет 468 landmarks
             return jsonify({"error": "Invalid landmarks data"}), 400
-        
+
         # Анализируем landmarks
         results = analyzer.analyze_landmarks(landmarks, image_width, image_height)
-        
+
         if results is None:
             return jsonify({"error": "Failed to analyze landmarks"}), 400
-            
+
         return jsonify({"results": results})
-        
+
     except Exception as e:
         logger.error(f"Error in analyze endpoint: {str(e)}")
         return jsonify({"error": str(e)}), 500
