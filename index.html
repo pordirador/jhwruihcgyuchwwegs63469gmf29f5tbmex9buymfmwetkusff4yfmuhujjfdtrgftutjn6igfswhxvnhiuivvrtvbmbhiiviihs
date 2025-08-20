@@ -3,9 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица4</title>
-    <link rel="icon" href="data:,">  <!-- Пустая иконка -->
+    <title>Анализатор пропорций лица5</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <style>
+        /* Ваши существующие стили остаются без изменений */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -126,19 +130,45 @@
         let currentImage = null;
         let analysisResults = [];
         let currentMetricIndex = 0;
+        let faceLandmarks = null;
         
-        // URL вашего бэкенда на PythonAnywhere
-        const BACKEND_URL = 'https://pupsikpups.pythonanywhere.com/analyze';
+        // URL вашего бэкенда
+        const BACKEND_URL = 'https://ваш-сервер.ru/analyze';
+        
+        // Инициализация MediaPipe Face Mesh
+        let faceMesh = null;
+        
+        async function initFaceMesh() {
+            faceMesh = new window.faceMesh.FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            await faceMesh.initialize();
+        }
+        
+        // Инициализация при загрузке
+        initFaceMesh();
         
         // Обработчик загрузки изображения
-        imageInput.addEventListener('change', function(e) {
+        imageInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
             
+            loadingIndicator.style.display = 'block';
+            
             const reader = new FileReader();
-            reader.onload = function(event) {
+            reader.onload = async function(event) {
                 const img = new Image();
-                img.onload = function() {
+                img.onload = async function() {
                     // Устанавливаем размеры canvas
                     const maxWidth = 800;
                     const maxHeight = 600;
@@ -160,50 +190,78 @@
                     ctx.drawImage(img, 0, 0, width, height);
                     currentImage = img;
                     
-                    // Отправляем изображение на анализ
-                    analyzeImage(img);
+                    // Получаем landmarks с помощью MediaPipe
+                    try {
+                        faceLandmarks = await detectFaceLandmarks(img);
+                        if (faceLandmarks && faceLandmarks.length > 0) {
+                            // Отправляем landmarks на бэкенд для анализа
+                            await analyzeLandmarks(faceLandmarks[0]);
+                        } else {
+                            alert('Лицо не обнаружено на изображении');
+                        }
+                    } catch (error) {
+                        console.error('Ошибка детекции лица:', error);
+                        alert('Ошибка при анализе лица');
+                    } finally {
+                        loadingIndicator.style.display = 'none';
+                    }
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
         
-        // Функция для отправки изображения на бэкенд
-        async function analyzeImage(img) {
-    try {
-        const imageData = getBase64Image(img);
-        
-        const response = await fetch('https://pupsikpups.pythonanywhere.com/analyze', {
-            method: 'POST',
-            mode: 'cors',  // Явно указываем режим CORS
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ image: imageData })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error('Ошибка при анализе:', error);
-        throw error;
-    }
-}
-        
-        // Функция для конвертации изображения в base64
-        function getBase64Image(img) {
+        // Функция для детекции landmarks
+        async function detectFaceLandmarks(img) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = img.width;
             tempCanvas.height = img.height;
             const tempCtx = tempCanvas.getContext('2d');
             tempCtx.drawImage(img, 0, 0);
-            return tempCanvas.toDataURL('image/jpeg').split(',')[1]; // Берем только данные без префикса
+            
+            return new Promise((resolve) => {
+                faceMesh.onResults((results) => {
+                    resolve(results.multiFaceLandmarks || []);
+                });
+                
+                faceMesh.send({image: tempCanvas});
+            });
         }
         
-        // Функция для отображения текущей метрики
+        // Функция для отправки landmarks на бэкенд
+        async function analyzeLandmarks(landmarks) {
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        landmarks: landmarks.map(lm => ({ x: lm.x, y: lm.y, z: lm.z })),
+                        image_width: currentImage.width,
+                        image_height: currentImage.height
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                analysisResults = data.results || [];
+                currentMetricIndex = 0;
+                
+                showCurrentMetric();
+                showAllResults();
+                
+            } catch (error) {
+                console.error('Ошибка при анализе:', error);
+                alert('Ошибка при отправке данных на сервер');
+            }
+        }
+        
+        // Остальные функции (showCurrentMetric, showAllResults, drawImageWithMetric)
+        // остаются без изменений, как в вашем исходном коде
         function showCurrentMetric() {
             if (analysisResults.length === 0) {
                 metricName.textContent = 'Нет данных';
@@ -215,7 +273,6 @@
             
             const metric = analysisResults[currentMetricIndex];
             
-            // Обновляем информацию о метрике
             metricName.textContent = metric.description.split(':')[0] || metric.description;
             metricDescription.textContent = metric.description;
             
@@ -245,17 +302,20 @@
             drawImageWithMetric();
         }
         
-        // Функция для отрисовки изображения с аннотациями
         function drawImageWithMetric() {
-            if (!currentImage) return;
+            if (!currentImage || !faceLandmarks) return;
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
             
-            // Здесь можно добавить рисование аннотаций, если нужно
+            // Отрисовка landmarks (опционально)
+            const drawingUtils = window.DrawingUtils;
+            drawingUtils.drawLandmarks(ctx, faceLandmarks[0], {
+                radius: 2,
+                color: '#FF0000'
+            });
         }
         
-        // Функция для отображения всех результатов
         function showAllResults() {
             if (analysisResults.length === 0) {
                 allResults.innerHTML = '<p>Нет результатов для отображения</p>';
