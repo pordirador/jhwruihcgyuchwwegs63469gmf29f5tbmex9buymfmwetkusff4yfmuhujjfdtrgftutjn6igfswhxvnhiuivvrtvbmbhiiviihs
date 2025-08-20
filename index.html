@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица</title>
+    <title>Анализатор пропорций лица8</title>
     <style>
         /* Ваши стили остаются без изменений */
         body {
@@ -120,6 +120,12 @@
         </div>
     </div>
 
+    <!-- Загружаем MediaPipe локально -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+
     <script>
         // Элементы страницы
         const canvas = document.getElementById('imageCanvas');
@@ -142,65 +148,18 @@
         let currentMetricIndex = 0;
         let faceMesh = null;
         
-        // URL вашего бэкенда
-        const BACKEND_URL = 'https://www.pythonanywhere.com/user/pupsikpups/webapps/#tab_id_pupsikpups_pythonanywhere_com';
+        // URL вашего бэкенда - исправьте на правильный
+        const BACKEND_URL = 'http://localhost:5000/analyze'; // Пример для локального сервера
         
-        // 1. Загружаем MediaPipe динамически
-        async function loadMediaPipe() {
-            mediapipeStatus.textContent = "Загрузка MediaPipe...";
-            mediapipeStatus.style.background = "#fff3cd";
-            
-            try {
-                // Пробуем загрузить через разные CDN
-                const scriptsToLoad = [
-                    'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js',
-                    'https://unpkg.com/@mediapipe/face_mesh/face_mesh.js'
-                ];
-                
-                for (const scriptUrl of scriptsToLoad) {
-                    try {
-                        await loadScript(scriptUrl);
-                        if (window.faceMesh && window.faceMesh.FaceMesh) {
-                            mediapipeStatus.textContent = "MediaPipe загружен!";
-                            mediapipeStatus.style.background = "#d4edda";
-                            return true;
-                        }
-                    } catch (e) {
-                        console.log(`Не удалось загрузить с ${scriptUrl}:`, e);
-                    }
-                }
-                
-                throw new Error("Не удалось загрузить MediaPipe ни с одного CDN");
-                
-            } catch (error) {
-                mediapipeStatus.textContent = "Ошибка загрузки MediaPipe: " + error.message;
-                mediapipeStatus.style.background = "#f8d7da";
-                throw error;
-            }
-        }
-        
-        // 2. Функция загрузки скрипта
-        function loadScript(src) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = src;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-        
-        // 3. Инициализация FaceMesh
+        // 1. Инициализация FaceMesh
         async function initFaceMesh() {
             try {
-                faceMesh = new window.faceMesh.FaceMesh({
+                mediapipeStatus.textContent = "Инициализация MediaPipe...";
+                mediapipeStatus.style.background = "#fff3cd";
+                
+                faceMesh = new FaceMesh({
                     locateFile: (file) => {
-                        // Пробуем разные CDN для ресурсов
-                        const cdnUrls = [
-                            `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
-                            `https://unpkg.com/@mediapipe/face_mesh/${file}`
-                        ];
-                        return cdnUrls[0]; // Используем первый вариант
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
                     }
                 });
                 
@@ -212,26 +171,16 @@
                 });
                 
                 await faceMesh.initialize();
-                return true;
-                
-            } catch (error) {
-                console.error('Ошибка инициализации FaceMesh:', error);
-                throw new Error('Не удалось инициализировать FaceMesh: ' + error.message);
-            }
-        }
-        
-        // 4. Основная функция инициализации
-        async function initializeApp() {
-            try {
-                await loadMediaPipe();
-                await initFaceMesh();
                 
                 mediapipeStatus.textContent = "Система готова к работе!";
                 mediapipeStatus.style.background = "#d4edda";
                 imageInput.disabled = false;
                 
+                return true;
+                
             } catch (error) {
-                mediapipeStatus.textContent = "Ошибка: " + error.message;
+                console.error('Ошибка инициализации FaceMesh:', error);
+                mediapipeStatus.textContent = "Ошибка инициализации MediaPipe: " + error.message;
                 mediapipeStatus.style.background = "#f8d7da";
                 imageInput.disabled = true;
                 
@@ -240,13 +189,14 @@
                 showError("1. Проверить интернет-соединение");
                 showError("2. Отключить блокировщики рекламы");
                 showError("3. Попробовать другой браузер");
+                throw error;
             }
         }
         
-        // 5. Запускаем инициализацию при загрузке
-        document.addEventListener('DOMContentLoaded', initializeApp);
+        // 2. Запускаем инициализацию при загрузке
+        document.addEventListener('DOMContentLoaded', initFaceMesh);
         
-        // 6. Обработчик загрузки изображения
+        // 3. Обработчик загрузки изображения
         imageInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -306,7 +256,7 @@
             reader.readAsDataURL(file);
         });
         
-        // 7. Функция обнаружения landmarks
+        // 4. Функция обнаружения landmarks
         async function detectFaceLandmarks(img) {
             return new Promise((resolve) => {
                 const tempCanvas = document.createElement('canvas');
@@ -323,13 +273,13 @@
             });
         }
         
-        // 8. Показать ошибку
+        // 5. Показать ошибку
         function showError(message) {
             errorMessage.innerHTML += message + '<br>';
             errorMessage.style.display = 'block';
         }
         
-        // 9. Отправка landmarks на бэкенд
+        // 6. Отправка landmarks на бэкенд
         async function analyzeLandmarks(landmarks) {
             try {
                 const response = await fetch(BACKEND_URL, {
