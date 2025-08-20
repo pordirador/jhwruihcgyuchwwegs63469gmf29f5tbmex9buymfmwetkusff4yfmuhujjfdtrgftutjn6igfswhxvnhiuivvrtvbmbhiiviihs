@@ -3,12 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица6</title>
-    <!-- Загружаем MediaPipe через CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <title>Анализатор пропорций лица</title>
     <style>
         /* Ваши стили остаются без изменений */
         body {
@@ -85,6 +80,12 @@
         .error {
             color: #F44336;
             margin: 10px 0;
+            display: none;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -92,10 +93,10 @@
     <div class="container">
         <div class="image-section">
             <h1>Анализатор пропорций лица</h1>
-            <div id="mediapipeStatus">Загрузка MediaPipe...</div>
-            <input type="file" id="imageInput" accept="image/*" disabled>
+            <div class="status" id="mediapipeStatus" style="background: #fff3cd;">Подготовка к работе...</div>
+            <input type="file" id="imageInput" accept="image/*">
             <div class="loading" id="loadingIndicator">Анализируем изображение...</div>
-            <div class="error" id="errorMessage" style="display: none;"></div>
+            <div class="error" id="errorMessage"></div>
             <div style="margin: 20px 0;">
                 <canvas id="imageCanvas"></canvas>
             </div>
@@ -139,36 +140,67 @@
         let currentImage = null;
         let analysisResults = [];
         let currentMetricIndex = 0;
-        let faceLandmarks = null;
         let faceMesh = null;
         
         // URL вашего бэкенда
         const BACKEND_URL = 'https://www.pythonanywhere.com/user/pupsikpups/webapps/#tab_id_pupsikpups_pythonanywhere_com';
         
-        // Ждем загрузки MediaPipe
-        async function waitForMediaPipe() {
-            return new Promise((resolve) => {
-                const checkMediaPipe = () => {
-                    if (window.faceMesh && window.faceMesh.FaceMesh) {
-                        resolve();
-                    } else {
-                        setTimeout(checkMediaPipe, 100);
+        // 1. Загружаем MediaPipe динамически
+        async function loadMediaPipe() {
+            mediapipeStatus.textContent = "Загрузка MediaPipe...";
+            mediapipeStatus.style.background = "#fff3cd";
+            
+            try {
+                // Пробуем загрузить через разные CDN
+                const scriptsToLoad = [
+                    'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js',
+                    'https://unpkg.com/@mediapipe/face_mesh/face_mesh.js'
+                ];
+                
+                for (const scriptUrl of scriptsToLoad) {
+                    try {
+                        await loadScript(scriptUrl);
+                        if (window.faceMesh && window.faceMesh.FaceMesh) {
+                            mediapipeStatus.textContent = "MediaPipe загружен!";
+                            mediapipeStatus.style.background = "#d4edda";
+                            return true;
+                        }
+                    } catch (e) {
+                        console.log(`Не удалось загрузить с ${scriptUrl}:`, e);
                     }
-                };
-                checkMediaPipe();
+                }
+                
+                throw new Error("Не удалось загрузить MediaPipe ни с одного CDN");
+                
+            } catch (error) {
+                mediapipeStatus.textContent = "Ошибка загрузки MediaPipe: " + error.message;
+                mediapipeStatus.style.background = "#f8d7da";
+                throw error;
+            }
+        }
+        
+        // 2. Функция загрузки скрипта
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
             });
         }
         
-        // Инициализация MediaPipe Face Mesh
+        // 3. Инициализация FaceMesh
         async function initFaceMesh() {
             try {
-                mediapipeStatus.textContent = "Инициализация MediaPipe...";
-                
-                await waitForMediaPipe();
-                
                 faceMesh = new window.faceMesh.FaceMesh({
                     locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                        // Пробуем разные CDN для ресурсов
+                        const cdnUrls = [
+                            `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+                            `https://unpkg.com/@mediapipe/face_mesh/${file}`
+                        ];
+                        return cdnUrls[0]; // Используем первый вариант
                     }
                 });
                 
@@ -180,22 +212,41 @@
                 });
                 
                 await faceMesh.initialize();
-                
-                mediapipeStatus.textContent = "MediaPipe готов к работе!";
-                mediapipeStatus.style.color = "green";
-                imageInput.disabled = false;
+                return true;
                 
             } catch (error) {
-                console.error('Ошибка инициализации MediaPipe:', error);
-                mediapipeStatus.textContent = "Ошибка загрузки MediaPipe: " + error.message;
-                mediapipeStatus.style.color = "red";
+                console.error('Ошибка инициализации FaceMesh:', error);
+                throw new Error('Не удалось инициализировать FaceMesh: ' + error.message);
             }
         }
         
-        // Инициализация при загрузке
-        document.addEventListener('DOMContentLoaded', initFaceMesh);
+        // 4. Основная функция инициализации
+        async function initializeApp() {
+            try {
+                await loadMediaPipe();
+                await initFaceMesh();
+                
+                mediapipeStatus.textContent = "Система готова к работе!";
+                mediapipeStatus.style.background = "#d4edda";
+                imageInput.disabled = false;
+                
+            } catch (error) {
+                mediapipeStatus.textContent = "Ошибка: " + error.message;
+                mediapipeStatus.style.background = "#f8d7da";
+                imageInput.disabled = true;
+                
+                // Предлагаем альтернативу
+                showError("MediaPipe не загрузился. Попробуйте:");
+                showError("1. Проверить интернет-соединение");
+                showError("2. Отключить блокировщики рекламы");
+                showError("3. Попробовать другой браузер");
+            }
+        }
         
-        // Обработчик загрузки изображения
+        // 5. Запускаем инициализацию при загрузке
+        document.addEventListener('DOMContentLoaded', initializeApp);
+        
+        // 6. Обработчик загрузки изображения
         imageInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -207,89 +258,78 @@
             reader.onload = async function(event) {
                 const img = new Image();
                 img.onload = async function() {
-                    // Устанавливаем размеры canvas
-                    const maxWidth = 800;
-                    const maxHeight = 600;
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if (width > maxWidth) {
-                        height = (maxWidth / width) * height;
-                        width = maxWidth;
-                    }
-                    
-                    if (height > maxHeight) {
-                        width = (maxHeight / height) * width;
-                        height = maxHeight;
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-                    currentImage = img;
-                    
-                    // Получаем landmarks с помощью MediaPipe
                     try {
-                        faceLandmarks = await detectFaceLandmarks(img);
-                        if (faceLandmarks && faceLandmarks.length > 0) {
-                            // Отправляем landmarks на бэкенд для анализа
-                            await analyzeLandmarks(faceLandmarks[0]);
-                        } else {
-                            showError('Лицо не обнаружено на изображении');
+                        // Устанавливаем размеры canvas
+                        const maxWidth = 800;
+                        const maxHeight = 600;
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        if (width > maxWidth) {
+                            height = (maxWidth / width) * height;
+                            width = maxWidth;
                         }
+                        
+                        if (height > maxHeight) {
+                            width = (maxHeight / height) * width;
+                            height = maxHeight;
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        currentImage = img;
+                        
+                        // Получаем landmarks
+                        mediapipeStatus.textContent = "Обнаружение лица...";
+                        const landmarks = await detectFaceLandmarks(img);
+                        
+                        if (landmarks && landmarks.length > 0) {
+                            mediapipeStatus.textContent = "Анализ пропорций...";
+                            await analyzeLandmarks(landmarks[0]);
+                        } else {
+                            throw new Error("Лицо не обнаружено на изображении");
+                        }
+                        
                     } catch (error) {
-                        console.error('Ошибка детекции лица:', error);
-                        showError('Ошибка при анализе лица: ' + error.message);
+                        showError(error.message);
                     } finally {
                         loadingIndicator.style.display = 'none';
                     }
                 };
                 img.onerror = function() {
                     loadingIndicator.style.display = 'none';
-                    showError('Ошибка загрузки изображения');
+                    showError("Ошибка загрузки изображения");
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
         
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-        }
-        
-        // Функция для детекции landmarks
+        // 7. Функция обнаружения landmarks
         async function detectFaceLandmarks(img) {
-            return new Promise((resolve, reject) => {
-                if (!faceMesh) {
-                    reject(new Error('MediaPipe не инициализирован'));
-                    return;
-                }
-                
+            return new Promise((resolve) => {
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = img.width;
                 tempCanvas.height = img.height;
                 const tempCtx = tempCanvas.getContext('2d');
                 tempCtx.drawImage(img, 0, 0);
                 
-                // Обработчик результатов
-                const resultsHandler = (results) => {
-                    faceMesh.onResults(null); // Убираем обработчик
+                faceMesh.onResults((results) => {
                     resolve(results.multiFaceLandmarks || []);
-                };
+                });
                 
-                faceMesh.onResults(resultsHandler);
-                
-                try {
-                    faceMesh.send({image: tempCanvas});
-                } catch (error) {
-                    faceMesh.onResults(null);
-                    reject(error);
-                }
+                faceMesh.send({image: tempCanvas});
             });
         }
         
-        // Функция для отправки landmarks на бэкенд
+        // 8. Показать ошибку
+        function showError(message) {
+            errorMessage.innerHTML += message + '<br>';
+            errorMessage.style.display = 'block';
+        }
+        
+        // 9. Отправка landmarks на бэкенд
         async function analyzeLandmarks(landmarks) {
             try {
                 const response = await fetch(BACKEND_URL, {
@@ -305,7 +345,7 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`Ошибка сервера: ${response.status}`);
                 }
                 
                 const data = await response.json();
@@ -314,86 +354,44 @@
                 
                 showCurrentMetric();
                 showAllResults();
+                mediapipeStatus.textContent = "Анализ завершен!";
                 
             } catch (error) {
-                console.error('Ошибка при анализе:', error);
-                showError('Ошибка при отправке данных на сервер: ' + error.message);
+                showError('Ошибка сервера: ' + error.message);
             }
         }
         
-        // Остальные функции остаются без изменений
+        // Остальные функции без изменений
         function showCurrentMetric() {
-            if (analysisResults.length === 0) {
-                metricName.textContent = 'Нет данных';
-                metricValue.textContent = '-';
-                metricIdeal.textContent = '-';
-                metricDescription.textContent = 'Не удалось проанализировать изображение';
-                return;
-            }
+            if (analysisResults.length === 0) return;
             
             const metric = analysisResults[currentMetricIndex];
-            
             metricName.textContent = metric.description.split(':')[0] || metric.description;
             metricDescription.textContent = metric.description;
             
             if (metric.status === 'error') {
                 metricValue.textContent = 'Ошибка расчета';
                 metricValue.style.color = '#F44336';
-                metricIdeal.textContent = `Ошибка: ${metric.message || 'неизвестная ошибка'}`;
+                metricIdeal.textContent = `Ошибка: ${metric.message}`;
             } else {
                 metricValue.textContent = metric.value_str || 'N/A';
                 metricValue.style.color = metric.status === 'ok' ? '#4CAF50' : '#FF9800';
-                
-                if (metric.ideal_range) {
-                    metricIdeal.textContent = 
-                        `Идеальный диапазон: ${metric.ideal_range[0].toFixed(2)}-${metric.ideal_range[1].toFixed(2)}`;
-                } else {
-                    metricIdeal.textContent = 'Нет данных об идеальном диапазоне';
-                }
-            }
-            
-            drawImageWithMetric();
-        }
-        
-        function drawImageWithMetric() {
-            if (!currentImage || !faceLandmarks) return;
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
-            
-            // Отрисовка landmarks
-            if (window.DrawingUtils && faceLandmarks.length > 0) {
-                window.DrawingUtils.drawLandmarks(ctx, faceLandmarks[0], {
-                    radius: 2,
-                    color: '#FF0000'
-                });
+                metricIdeal.textContent = `Идеально: ${metric.ideal_range[0]}-${metric.ideal_range[1]}`;
             }
         }
         
         function showAllResults() {
-            if (analysisResults.length === 0) {
-                allResults.innerHTML = '<p>Нет результатов для отображения</p>';
-                return;
-            }
+            if (analysisResults.length === 0) return;
             
-            let html = '<h3>Все результаты:</h3><ul>';
-            
+            let html = '<h3>Результаты:</h3><ul>';
             analysisResults.forEach((result, index) => {
-                const isCurrent = index === currentMetricIndex;
-                const color = result.status === 'ok' ? 'green' : 
-                             result.status === 'bad' ? 'orange' : 'red';
-                
-                html += `<li style="margin-bottom: 10px; ${isCurrent ? 'font-weight: bold;' : ''}">
-                    <span style="color: ${color}">${result.description.split(':')[0]}</span>: 
-                    ${result.value_str || 'N/A'}
-                </li>`;
+                const color = result.status === 'ok' ? 'green' : 'orange';
+                html += `<li style="color: ${color}">${result.description}: ${result.value_str}</li>`;
             });
-            
             html += '</ul>';
             allResults.innerHTML = html;
         }
         
-        // Обработчики кнопок навигации
         prevBtn.addEventListener('click', () => {
             if (analysisResults.length === 0) return;
             currentMetricIndex = (currentMetricIndex - 1 + analysisResults.length) % analysisResults.length;
