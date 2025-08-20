@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализатор пропорций лица5</title>
+    <title>Анализатор пропорций лица</title>
+    <!-- Загружаем MediaPipe через CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <style>
-        /* Ваши существующие стили остаются без изменений */
+        /* Ваши стили остаются без изменений */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -81,14 +82,20 @@
             color: #2196F3;
             font-weight: bold;
         }
+        .error {
+            color: #F44336;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="image-section">
             <h1>Анализатор пропорций лица</h1>
-            <input type="file" id="imageInput" accept="image/*">
+            <div id="mediapipeStatus">Загрузка MediaPipe...</div>
+            <input type="file" id="imageInput" accept="image/*" disabled>
             <div class="loading" id="loadingIndicator">Анализируем изображение...</div>
+            <div class="error" id="errorMessage" style="display: none;"></div>
             <div style="margin: 20px 0;">
                 <canvas id="imageCanvas"></canvas>
             </div>
@@ -118,6 +125,8 @@
         const ctx = canvas.getContext('2d');
         const imageInput = document.getElementById('imageInput');
         const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const mediapipeStatus = document.getElementById('mediapipeStatus');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const metricName = document.getElementById('metricName');
@@ -131,32 +140,60 @@
         let analysisResults = [];
         let currentMetricIndex = 0;
         let faceLandmarks = null;
+        let faceMesh = null;
         
         // URL вашего бэкенда
         const BACKEND_URL = 'https://ваш-сервер.ru/analyze';
         
-        // Инициализация MediaPipe Face Mesh
-        let faceMesh = null;
+        // Ждем загрузки MediaPipe
+        async function waitForMediaPipe() {
+            return new Promise((resolve) => {
+                const checkMediaPipe = () => {
+                    if (window.faceMesh && window.faceMesh.FaceMesh) {
+                        resolve();
+                    } else {
+                        setTimeout(checkMediaPipe, 100);
+                    }
+                };
+                checkMediaPipe();
+            });
+        }
         
+        // Инициализация MediaPipe Face Mesh
         async function initFaceMesh() {
-            faceMesh = new window.faceMesh.FaceMesh({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-                }
-            });
-            
-            faceMesh.setOptions({
-                maxNumFaces: 1,
-                refineLandmarks: true,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-            
-            await faceMesh.initialize();
+            try {
+                mediapipeStatus.textContent = "Инициализация MediaPipe...";
+                
+                await waitForMediaPipe();
+                
+                faceMesh = new window.faceMesh.FaceMesh({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                    }
+                });
+                
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                
+                await faceMesh.initialize();
+                
+                mediapipeStatus.textContent = "MediaPipe готов к работе!";
+                mediapipeStatus.style.color = "green";
+                imageInput.disabled = false;
+                
+            } catch (error) {
+                console.error('Ошибка инициализации MediaPipe:', error);
+                mediapipeStatus.textContent = "Ошибка загрузки MediaPipe: " + error.message;
+                mediapipeStatus.style.color = "red";
+            }
         }
         
         // Инициализация при загрузке
-        initFaceMesh();
+        document.addEventListener('DOMContentLoaded', initFaceMesh);
         
         // Обработчик загрузки изображения
         imageInput.addEventListener('change', async function(e) {
@@ -164,6 +201,7 @@
             if (!file) return;
             
             loadingIndicator.style.display = 'block';
+            errorMessage.style.display = 'none';
             
             const reader = new FileReader();
             reader.onload = async function(event) {
@@ -197,34 +235,57 @@
                             // Отправляем landmarks на бэкенд для анализа
                             await analyzeLandmarks(faceLandmarks[0]);
                         } else {
-                            alert('Лицо не обнаружено на изображении');
+                            showError('Лицо не обнаружено на изображении');
                         }
                     } catch (error) {
                         console.error('Ошибка детекции лица:', error);
-                        alert('Ошибка при анализе лица');
+                        showError('Ошибка при анализе лица: ' + error.message);
                     } finally {
                         loadingIndicator.style.display = 'none';
                     }
+                };
+                img.onerror = function() {
+                    loadingIndicator.style.display = 'none';
+                    showError('Ошибка загрузки изображения');
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
         
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+        
         // Функция для детекции landmarks
         async function detectFaceLandmarks(img) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = img.width;
-            tempCanvas.height = img.height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0);
-            
-            return new Promise((resolve) => {
-                faceMesh.onResults((results) => {
-                    resolve(results.multiFaceLandmarks || []);
-                });
+            return new Promise((resolve, reject) => {
+                if (!faceMesh) {
+                    reject(new Error('MediaPipe не инициализирован'));
+                    return;
+                }
                 
-                faceMesh.send({image: tempCanvas});
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(img, 0, 0);
+                
+                // Обработчик результатов
+                const resultsHandler = (results) => {
+                    faceMesh.onResults(null); // Убираем обработчик
+                    resolve(results.multiFaceLandmarks || []);
+                };
+                
+                faceMesh.onResults(resultsHandler);
+                
+                try {
+                    faceMesh.send({image: tempCanvas});
+                } catch (error) {
+                    faceMesh.onResults(null);
+                    reject(error);
+                }
             });
         }
         
@@ -256,12 +317,11 @@
                 
             } catch (error) {
                 console.error('Ошибка при анализе:', error);
-                alert('Ошибка при отправке данных на сервер');
+                showError('Ошибка при отправке данных на сервер: ' + error.message);
             }
         }
         
-        // Остальные функции (showCurrentMetric, showAllResults, drawImageWithMetric)
-        // остаются без изменений, как в вашем исходном коде
+        // Остальные функции остаются без изменений
         function showCurrentMetric() {
             if (analysisResults.length === 0) {
                 metricName.textContent = 'Нет данных';
@@ -285,15 +345,8 @@
                 metricValue.style.color = metric.status === 'ok' ? '#4CAF50' : '#FF9800';
                 
                 if (metric.ideal_range) {
-                    if (Array.isArray(metric.ideal_range[0])) {
-                        metricIdeal.innerHTML = 'Идеальные диапазоны:<br>' + 
-                            metric.ideal_range.map((r, i) => 
-                                `Часть ${i+1}: ${r[0].toFixed(2)}-${r[1].toFixed(2)}`
-                            ).join('<br>');
-                    } else {
-                        metricIdeal.textContent = 
-                            `Идеальный диапазон: ${metric.ideal_range[0].toFixed(2)}-${metric.ideal_range[1].toFixed(2)}`;
-                    }
+                    metricIdeal.textContent = 
+                        `Идеальный диапазон: ${metric.ideal_range[0].toFixed(2)}-${metric.ideal_range[1].toFixed(2)}`;
                 } else {
                     metricIdeal.textContent = 'Нет данных об идеальном диапазоне';
                 }
@@ -308,12 +361,13 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
             
-            // Отрисовка landmarks (опционально)
-            const drawingUtils = window.DrawingUtils;
-            drawingUtils.drawLandmarks(ctx, faceLandmarks[0], {
-                radius: 2,
-                color: '#FF0000'
-            });
+            // Отрисовка landmarks
+            if (window.DrawingUtils && faceLandmarks.length > 0) {
+                window.DrawingUtils.drawLandmarks(ctx, faceLandmarks[0], {
+                    radius: 2,
+                    color: '#FF0000'
+                });
+            }
         }
         
         function showAllResults() {
